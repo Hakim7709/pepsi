@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inventory & Admin System</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- html2pdf.js for direct PDF download -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    
+    <!-- html2canvas for Image Generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    
+    <style>
+        /* General Styles */
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+
+        /* Print Specifics */
+        @media print {
+            .no-print { display: none !important; }
+            .print-only { display: block !important; }
+            /* Force background colors in print */
+            body { -webkit-print-color-adjust: exact; }
+            @page { size: landscape; margin: 0.5cm; }
+        }
+        /* Ensure print-only section is hidden on screen by default */
+        .print-only { display: none; }
+        
+        /* Styles specifically for the PDF/Image generation container */
+        #pdf-content {
+            background-color: white;
+            padding: 10px;
+            width: 1300px; /* Adjusted width to fit landscape page better */
+            margin: 0 auto; 
+        }
+        /* Strict borders for the PDF table */
+        .pdf-table { 
+            border-collapse: collapse; 
+            width: 100%; 
+            border: 2px solid black; 
+            font-family: Arial, sans-serif; 
+            font-size: 14px; /* Requested Font Size */
+            table-layout: fixed; 
+        }
+        
+        /* Table Cells */
+        .pdf-table th, .pdf-table td { 
+            border: 1px solid black; 
+            padding: 10px; /* Reduced padding */
+            text-align: center; 
+            vertical-align: middle; 
+            height: 30px; 
+            overflow: hidden;
+            white-space: nowrap;
+        }
+        
+        /* Exact Excel Colors */
+        .bg-excel-red { background-color: #FF0000 !important; color: white !important; -webkit-print-color-adjust: exact; }
+        .bg-excel-blue { background-color: #9CC2E5 !important; -webkit-print-color-adjust: exact; }
+        .bg-excel-green { background-color: #92D050 !important; -webkit-print-color-adjust: exact; }
+        .bg-excel-gray { background-color: #BFBFBF !important; -webkit-print-color-adjust: exact; }
+        .bg-excel-lightgray { background-color: #D9D9D9 !important; -webkit-print-color-adjust: exact; }
+        .bg-excel-yellow { background-color: #FFC000 !important; -webkit-print-color-adjust: exact; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+    </style>
+</head>
+<body class="bg-gray-50 text-slate-800">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useMemo, useEffect, useRef } = React;
+
+        // --- ICONS ---
+        const IconBase = ({ children, size = 20, className = "" }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{children}</svg>
+        );
+        const Package = (p) => <IconBase {...p}><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22v-10"/></IconBase>;
+        const RotateCcw = (p) => <IconBase {...p}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></IconBase>;
+        const AlertTriangle = (p) => <IconBase {...p}><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></IconBase>;
+        const CheckCircle2 = (p) => <IconBase {...p}><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></IconBase>;
+        const Truck = (p) => <IconBase {...p}><path d="M5 18H3c-.6 0-1-.4-1-1V7c0-.6.4-1 1-1h10c.6 0 1 .4 1 1v11"/><path d="M14 9h4l4 4v4c0 .6-.4 1-1 1h-2"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></IconBase>;
+        const Calendar = (p) => <IconBase {...p}><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></IconBase>;
+        const ChevronDown = (p) => <IconBase {...p}><path d="m6 9 6 6 6-6"/></IconBase>;
+        const Target = (p) => <IconBase {...p}><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></IconBase>;
+        const Activity = (p) => <IconBase {...p}><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></IconBase>;
+        const CalendarClock = (p) => <IconBase {...p}><path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h5"/><path d="M17.5 17.5 16 16.25V14"/><path d="M22 16a6 6 0 1 1-12 0 6 6 0 0 1 12 0Z"/></IconBase>;
+        const ShieldCheck = (p) => <IconBase {...p}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/></IconBase>;
+        const ShoppingCart = (p) => <IconBase {...p}><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></IconBase>;
+        const AlertOctagon = (p) => <IconBase {...p}><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></IconBase>;
+        const Pencil = (p) => <IconBase {...p}><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></IconBase>;
+        const FileSpreadsheet = (p) => <IconBase {...p}><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M8 13h2"/><path d="M8 17h2"/><path d="M14 13h2"/><path d="M14 17h2"/></IconBase>;
+        const Printer = (p) => <IconBase {...p}><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></IconBase>;
+        const MessageCircle = (p) => <IconBase {...p}><path d="m3 21 1.9-5.7a8.5 8.5 0 1 1 3.8 3.8z"/></IconBase>;
+        const Settings = (p) => <IconBase {...p}><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.51a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></IconBase>;
+        const Trash2 = (p) => <IconBase {...p}><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></IconBase>;
+        const Plus = (p) => <IconBase {...p}><path d="M5 12h14"/><path d="M12 5v14"/></IconBase>;
+        const Save = (p) => <IconBase {...p}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></IconBase>;
+        const Lock = (p) => <IconBase {...p}><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></IconBase>;
+        const X = (p) => <IconBase {...p}><path d="M18 6 6 18"/><path d="m6 6 12 12"/></IconBase>;
+        const Clock = (p) => <IconBase {...p}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></IconBase>;
+        const FileDown = (p) => <IconBase {...p}><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M12 12v9"/><path d="m8 17 4 4 4-4"/></IconBase>;
+        const ImageDown = (p) => <IconBase {...p}><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></IconBase>;
+
+        // --- DEFAULT DATA ---
+        const DEFAULT_DATA = [
+            { id: 1, name: "Pepsi", need: 3960, perCarton: 24 },
+            { id: 2, name: "Diet Pepsi", need: 840, perCarton: 24 },
+            { id: 3, name: "7 Up", need: 840, perCarton: 24 },
+            { id: 4, name: "Mirinda Orange", need: 420, perCarton: 24 },
+            { id: 5, name: "Citrus", need: 3840, perCarton: 24 },
+            { id: 6, name: "Shani", need: 10, perCarton: 24 },
+            { id: 7, name: "Ice Tea Peach", need: 96, perCarton: 6 },
+            { id: 8, name: "Ice Tea Lemon", need: 69, perCarton: 6 },
+            { id: 9, name: "7 Up Diet", need: 300, perCarton: 24 },
+        ];
+
+        // Updated for 17-Day Cycle Logic
+        const DAY_CONFIG = {
+            Saturday: { cycle: 17, safety: 3 },
+            Sunday: { cycle: 16, safety: 2 },
+            Monday: { cycle: 15, safety: 1 }
+        };
+
+        // --- COMPONENTS ---
+
+        const LoginModal = ({ onClose, onLogin }) => {
+            const [pass, setPass] = useState("");
+            const [error, setError] = useState(false);
+            const inputRef = useRef(null);
+
+            useEffect(() => { if(inputRef.current) inputRef.current.focus(); }, []);
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if (pass === "7708") onLogin();
+                else { setError(true); setPass(""); }
+            };
+
+            return (
+                <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm animate-[fadeIn_0.2s_ease-out]">
+                    <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl relative">
+                        <button onClick={onClose} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><X /></button>
+                        <h3 className="text-xl font-bold text-center mb-4">Admin Access</h3>
+                        <form onSubmit={handleSubmit}>
+                            <input ref={inputRef} type="password" placeholder="Passcode" className="w-full border-2 rounded-xl p-3 mb-4 text-center text-lg outline-none focus:border-blue-500" value={pass} onChange={e => {setPass(e.target.value); setError(false);}} />
+                            {error && <p className="text-red-500 text-xs text-center mb-4 font-bold">Incorrect Password</p>}
+                            <button type="submit" className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 shadow-lg">Login</button>
+                        </form>
+                    </div>
+                </div>
+            );
+        };
+
+        const ConfirmModal = ({ title, message, onConfirm, onCancel, confirmText = "Confirm", isDestructive = false }) => (
+            <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm animate-[fadeIn_0.2s_ease-out]">
+                <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+                    <h3 className="text-xl font-bold mb-2">{title}</h3>
+                    <p className="text-slate-600 mb-6">{message}</p>
+                    <div className="flex gap-3">
+                        <button onClick={onCancel} className="flex-1 py-3 bg-slate-100 text-slate-700 font-bold rounded-xl hover:bg-slate-200">Cancel</button>
+                        <button onClick={onConfirm} className={`flex-1 py-3 text-white font-bold rounded-xl shadow-lg ${isDestructive ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'}`}>{confirmText}</button>
+                    </div>
+                </div>
+            </div>
+        );
+
+        const AdminView = ({ items, onSave, onReset }) => {
+            const [localItems, setLocalItems] = useState(items);
+            const [itemToDelete, setItemToDelete] = useState(null);
+
+            useEffect(() => { setLocalItems(items); }, [items]);
+
+            const handleChange = (id, field, value) => {
+                setLocalItems(prev => prev.map(item => item.id === id ? { ...item, [field]: value } : item));
+            };
+
+            const confirmDelete = () => {
+                if (itemToDelete !== null) {
+                    const newItems = localItems.filter(item => item.id !== itemToDelete);
+                    setLocalItems(newItems);
+                    onSave(newItems);
+                    setItemToDelete(null);
+                }
+            };
+
+            const handleAdd = () => {
+                const newId = localItems.length > 0 ? Math.max(...localItems.map(i => i.id)) + 1 : 1;
+                const newItems = [...localItems, { id: newId, name: "New Item", need: 1000, perCarton: 100 }];
+                setLocalItems(newItems);
+                onSave(newItems);
+            };
+
+            return (
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                    {itemToDelete !== null && <ConfirmModal title="Delete Item?" message="Remove this item permanently?" confirmText="Delete" isDestructive={true} onConfirm={confirmDelete} onCancel={() => setItemToDelete(null)} />}
+                    <div className="flex justify-between items-center mb-6">
+                        <h2 className="text-xl font-bold flex gap-2"><Settings /> Manage Items</h2>
+                        <div className="flex gap-3">
+                            <button onClick={onReset} className="px-4 py-2 text-sm text-red-600 font-bold hover:bg-red-50 rounded-lg">Reset Default</button>
+                            <button onClick={() => { onSave(localItems); alert("Saved!"); }} className="flex gap-2 items-center bg-blue-600 text-white px-6 py-2 rounded-xl font-bold hover:bg-blue-700"><Save /> Save Changes</button>
+                        </div>
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left text-sm">
+                            <thead className="bg-slate-50 border-b">
+                                <tr>
+                                    <th className="p-3">Item Name</th>
+                                    <th className="p-3 w-24">10d Need</th>
+                                    <th className="p-3 w-24">Pcs/Ctn</th>
+                                    <th className="p-3 w-16"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {localItems.map(item => (
+                                    <tr key={item.id} className="border-b hover:bg-slate-50">
+                                        <td className="p-2"><input className="w-full bg-transparent font-medium outline-none" value={item.name} onChange={(e) => handleChange(item.id, 'name', e.target.value)} /></td>
+                                        <td className="p-2"><input type="number" className="w-full bg-slate-50 p-1 rounded text-center" value={item.need} onChange={(e) => handleChange(item.id, 'need', +e.target.value)} /></td>
+                                        <td className="p-2"><input type="number" className="w-full bg-slate-50 p-1 rounded text-center" value={item.perCarton} onChange={(e) => handleChange(item.id, 'perCarton', +e.target.value)} /></td>
+                                        <td className="p-2 text-center"><button onClick={() => setItemToDelete(item.id)} className="text-slate-400 hover:text-red-500"><Trash2 /></button></td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                    <button onClick={handleAdd} className="mt-4 flex gap-2 text-blue-600 font-bold text-sm hover:bg-blue-50 px-3 py-2 rounded-lg"><Plus /> Add New Item</button>
+                </div>
+            );
+        };
+
+        function App() {
+            const [items, setItems] = useState(() => {
+                try {
+                    const saved = localStorage.getItem('inventoryData');
+                    return saved ? JSON.parse(saved) : DEFAULT_DATA;
+                } catch(e) { return DEFAULT_DATA; }
+            });
+            const [isAdminMode, setIsAdminMode] = useState(false);
+            const [showLoginModal, setShowLoginModal] = useState(false);
+            const [showResetConfirm, setShowResetConfirm] = useState(false);
+            const [lineQuantities, setLineQuantities] = useState({});
+            const [upcomingQuantities, setUpcomingQuantities] = useState({});
+            const [selectedDay, setSelectedDay] = useState('Saturday');
+
+            const handleSaveItems = (newItems) => { setItems(newItems); localStorage.setItem('inventoryData', JSON.stringify(newItems)); };
+            const handleResetDataConfirm = () => { setItems(DEFAULT_DATA); localStorage.removeItem('inventoryData'); setShowResetConfirm(false); };
+            const handleResetInputs = () => { if (confirm('Clear all inputs?')) { setLineQuantities({}); setUpcomingQuantities({}); }};
+
+            const calculatedData = useMemo(() => {
+                const config = DAY_CONFIG[selectedDay];
+                return items.map(item => {
+                    const currentLines = lineQuantities[item.id] || 0;
+                    const upcomingLines = upcomingQuantities[item.id] || 0;
+                    const currentPieces = currentLines * item.perCarton;
+                    const upcomingPieces = upcomingLines * item.perCarton;
+                    const dailyUsage = item.need / 10;
+                    
+                    const safetyStockNeeded = dailyUsage * config.safety;
+                    const isCritical = currentPieces < safetyStockNeeded;
+                    const daysLasting = dailyUsage > 0 ? currentPieces / dailyUsage : 0;
+                    
+                    const targetPieces = dailyUsage * config.cycle;
+                    const totalProjectedStock = currentPieces + upcomingPieces;
+                    const deficit = targetPieces - totalProjectedStock;
+                    const cartonsNeeded = deficit > 0 ? Math.ceil(deficit / item.perCarton) : 0;
+
+                    return { ...item, currentLines, upcomingLines, dailyUsage, daysLasting, isCritical, cartonsNeeded, isFulfilled: deficit <= 0 };
+                });
+            }, [lineQuantities, upcomingQuantities, selectedDay, items]);
+
+            const summary = useMemo(() => {
+                return calculatedData.reduce((acc, item) => ({
+                    totalCartons: acc.totalCartons + item.cartonsNeeded,
+                    criticalItems: acc.criticalItems + (item.isCritical ? 1 : 0)
+                }), { totalCartons: 0, criticalItems: 0 });
+            }, [calculatedData]);
+
+            const currentConfig = DAY_CONFIG[selectedDay];
+
+            const getWeekDates = () => {
+                const days = ['Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+                const today = new Date();
+                const dayOfWeek = today.getDay(); 
+                const daysUntilNextSaturday = (6 - dayOfWeek + 7) % 7 || 7; 
+                const startDat = new Date(today);
+                startDat.setDate(today.getDate() + daysUntilNextSaturday);
+
+                const result = [];
+                for (let i = 0; i < 7; i++) {
+                    const d = new Date(startDat);
+                    d.setDate(startDat.getDate() + i);
+                    const day = d.getDate();
+                    const month = d.toLocaleString('default', { month: 'short' });
+                    const year = d.getFullYear().toString().slice(-2);
+                    result.push({ dayName: days[i], dateStr: `${day}-${month}-${year}` });
+                }
+                return result;
+            };
+            
+            const weekDates = useMemo(() => getWeekDates(), []);
+
+            // --- EXPORT HANDLERS ---
+            const handleDownloadImage = () => {
+                const element = document.getElementById('pdf-content');
+                element.style.display = 'block';
+                html2canvas(element, { scale: 2 }).then(canvas => {
+                    element.style.display = 'none';
+                    const link = document.createElement('a');
+                    link.download = `Inventory_Order_${new Date().toISOString().split('T')[0]}.png`;
+                    link.href = canvas.toDataURL("image/png");
+                    link.click();
+                    alert("Image Report Downloaded Successfully!");
+                });
+            };
+
+            const handleDownloadPDF = () => {
+                const element = document.getElementById('pdf-content');
+                element.style.display = 'block';
+                const opt = { 
+                    margin: [0.3, 0.3], 
+                    filename: `Inventory_Order_${new Date().toISOString().split('T')[0]}.pdf`, 
+                    image: { type: 'jpeg', quality: 0.98 }, 
+                    html2canvas: { scale: 1.5 }, 
+                    jsPDF: { unit: 'in', format: 'letter', orientation: 'landscape' } 
+                };
+                html2pdf().set(opt).from(element).save().then(() => { element.style.display = 'none'; });
+            };
+
+            const handleExportExcel = () => {
+                const dateHeaders = weekDates.map(d => `${d.dayName} (${d.dateStr})`);
+                const headers = ['Hudaithi', ...dateHeaders, 'Total'];
+                const rows = calculatedData.map(item => [
+                    `"${item.name}"`, '', '', item.cartonsNeeded > 0 ? item.cartonsNeeded : '', '', '', '', '', item.cartonsNeeded > 0 ? item.cartonsNeeded : ''
+                ]);
+                const footerRow = ['Total Quantity (in Carton)', '', '', summary.totalCartons, '', '', '', '', summary.totalCartons].join(',');
+                const csvContent = [['Hudaithi', ...dateHeaders, 'Total'].join(','), ['Flavours', 'Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Total'].join(','), ...rows.map(r => r.join(',')), footerRow].join('\n');
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(new Blob([csvContent], { type: 'text/csv;charset=utf-8;' }));
+                link.setAttribute('download', `Inventory_${new Date().toISOString().split('T')[0]}.csv`);
+                document.body.appendChild(link); link.click(); document.body.removeChild(link);
+            };
+
+            const renderItemStats = (item) => (
+                <div className="flex flex-wrap items-center gap-2 text-xs mt-2 text-gray-500">
+                    <span className="flex items-center gap-1 bg-gray-100 px-2 py-1 rounded border"><Target size={12} /> Need: {item.need.toLocaleString()}</span>
+                    <span className="flex items-center gap-1 bg-gray-100 px-2 py-1 rounded border"><Activity size={12} /> Avg: {Math.round(item.dailyUsage)}/d</span>
+                </div>
+            );
+
+            return (
+                <div className="min-h-screen font-sans pb-24 md:pb-8">
+                    {showLoginModal && <LoginModal onClose={() => setShowLoginModal(false)} onLogin={() => { setShowLoginModal(false); setIsAdminMode(true); }} />}
+                    {showResetConfirm && <ConfirmModal title="Reset Data?" message="This will revert to default items." isDestructive={true} onConfirm={handleResetDataConfirm} onCancel={() => setShowResetConfirm(false)} />}
+
+                    <div className="bg-slate-900 text-white p-2 flex justify-end px-4 gap-3 text-xs font-bold no-print">
+                        <button onClick={() => setIsAdminMode(false)} className={`px-3 py-1 rounded-full ${!isAdminMode ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}>Planner View</button>
+                        <button onClick={() => (!isAdminMode && setShowLoginModal(true))} className={`px-3 py-1 rounded-full ${isAdminMode ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}>Admin Mode</button>
+                    </div>
+
+                    {isAdminMode ? (
+                        <div className="max-w-7xl mx-auto p-4 md:p-6">
+                            <AdminView items={items} onSave={handleSaveItems} onReset={() => setShowResetConfirm(true)} />
+                        </div>
+                    ) : (
+                        <div>
+                            {/* PDF/IMAGE GENERATION CONTAINER */}
+                            <div id="pdf-content" style={{ display: 'none' }}>
+                                <table className="pdf-table">
+                                    <colgroup>
+                                        <col style={{width: "15%"}} /> {/* Hudaithi Name */}
+                                        <col style={{width: "11%"}} /> {/* Sat */}
+                                        <col style={{width: "11%"}} /> {/* Sun */}
+                                        <col style={{width: "11%"}} /> {/* Mon */}
+                                        <col style={{width: "11%"}} /> {/* Tue */}
+                                        <col style={{width: "11%"}} /> {/* Wed */}
+                                        <col style={{width: "11%"}} /> {/* Thu */}
+                                        <col style={{width: "11%"}} /> {/* Fri */}
+                                        <col style={{width: "8%"}} /> {/* Total */}
+                                    </colgroup>
+                                    <thead>
+                                        <tr><th colSpan="9" className="bg-excel-red" style={{ fontSize: '18px', padding: '10px', textTransform: 'uppercase' }}>Hudaithi Weekly Order of Pepsi products</th></tr>
+                                        <tr>
+                                            <th className="bg-excel-blue" style={{ width: '150px' }}>Hudaithi</th>
+                                            {weekDates.map((d, idx) => <th key={idx} className="bg-excel-green" style={{ fontWeight: 'normal' }}>{d.dateStr}</th>)}
+                                            <th className="bg-excel-green"></th>
+                                        </tr>
+                                        <tr>
+                                            <th className="bg-excel-gray">Flavours</th>
+                                            {weekDates.map((d, idx) => <th key={idx} className="bg-excel-gray">{d.dayName}</th>)}
+                                            <th className="bg-excel-gray">Total</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {calculatedData.map((item, idx) => (
+                                            <tr key={item.id}>
+                                                <td className="bg-excel-lightgray" style={{ textAlign: 'left', fontWeight: 'bold' }}>{item.name}</td>
+                                                <td></td><td></td>
+                                                <td className="bg-excel-yellow" style={{ fontWeight: 'bold' }}>{item.cartonsNeeded > 0 ? item.cartonsNeeded : ''}</td>
+                                                <td></td><td></td><td></td><td></td>
+                                                <td style={{ fontWeight: 'bold' }}>{item.cartonsNeeded > 0 ? item.cartonsNeeded : ''}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                    <tfoot>
+                                        <tr>
+                                            <td className="bg-excel-blue" style={{ textAlign: 'left', fontWeight: 'bold' }}>Total Quantity (in Carton)</td>
+                                            <td></td><td></td>
+                                            <td className="bg-excel-yellow" style={{ fontWeight: 'bold' }}>{summary.totalCartons}</td>
+                                            <td></td><td></td><td></td><td></td>
+                                            <td style={{ fontWeight: 'bold' }}>{summary.totalCartons}</td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+
+                            {/* MAIN UI */}
+                            <div className="max-w-7xl mx-auto space-y-4 md:space-y-6 md:p-6 p-3 no-print">
+                                <header className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-slate-100">
+                                    <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6">
+                                        <div className="w-full xl:w-auto">
+                                            <div className="flex items-center justify-between">
+                                                <h1 className="text-xl md:text-2xl font-bold text-slate-900 flex items-center gap-2">
+                                                    <div className="bg-blue-100 p-2 rounded-lg text-blue-600"><Package size={24} /></div>
+                                                    Inventory Planner
+                                                </h1>
+                                                <button onClick={handleResetInputs} className="md:hidden p-2 text-slate-400 hover:bg-red-50 rounded-full"><RotateCcw size={20} /></button>
+                                            </div>
+                                            <div className="flex gap-3 mt-4 md:mt-2 text-sm text-slate-500">
+                                                <div className="flex items-center gap-1.5 bg-blue-50 px-3 py-1.5 rounded-lg text-blue-700 border border-blue-100"><CalendarClock size={14} className="opacity-70" /><span className="font-bold">{currentConfig.cycle} Days Cycle</span></div>
+                                                <div className="flex items-center gap-1.5 bg-purple-50 px-3 py-1.5 rounded-lg text-purple-700 border border-purple-100"><ShieldCheck size={14} className="opacity-70" /><span className="font-bold">{currentConfig.safety} Days Safety</span></div>
+                                            </div>
+                                        </div>
+                                        <div className="flex flex-col w-full xl:w-auto gap-4">
+                                            <div className="flex flex-col sm:flex-row gap-3">
+                                                <div className="relative w-full sm:w-auto">
+                                                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><Calendar size={18} /></div>
+                                                    <select value={selectedDay} onChange={(e) => setSelectedDay(e.target.value)} className="w-full sm:w-48 pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 appearance-none focus:outline-none focus:border-blue-500 cursor-pointer">
+                                                        <option value="Saturday">Saturday</option><option value="Sunday">Sunday</option><option value="Monday">Monday</option>
+                                                    </select>
+                                                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
+                                                </div>
+                                                <button onClick={handleResetInputs} className="hidden md:flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl"><RotateCcw size={16} /> Reset</button>
+                                            </div>
+                                            <div className="flex gap-2 items-center">
+                                                <button onClick={handleDownloadImage} className="flex-1 px-3 py-2 text-xs font-bold text-green-700 bg-green-50 border border-green-200 rounded-lg flex justify-center gap-2 hover:bg-green-100"><ImageDown size={16} /> Download Image</button>
+                                                <button onClick={handleExportExcel} className="flex-1 px-3 py-2 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg flex justify-center gap-2 hover:bg-emerald-100"><FileSpreadsheet size={16} /> Excel</button>
+                                                <button onClick={handleDownloadPDF} className="flex-1 px-3 py-2 text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg flex justify-center gap-2 hover:bg-slate-100"><FileDown size={16} /> Download PDF</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </header>
+
+                                {/* MOBILE CARDS */}
+                                <div className="md:hidden space-y-4">
+                                    {calculatedData.map(item => (
+                                        <div key={item.id} className={`bg-white rounded-xl p-4 shadow-sm border-2 transition-all ${item.isCritical ? 'border-red-100' : 'border-slate-100'}`}>
+                                            <div className="mb-4">
+                                                <h3 className="font-bold text-slate-800 text-lg">{item.name}</h3>
+                                                {renderItemStats(item)}
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-3 mb-4">
+                                                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 shadow-inner">
+                                                    <div className="flex gap-2 text-slate-500 mb-1"><Pencil size={14} /><label className="text-xs font-bold uppercase tracking-wider">Current</label></div>
+                                                    <input type="number" inputMode="decimal" placeholder="0" value={lineQuantities[item.id] ?? ''} onChange={(e) => handleQuantityChange(item.id, e.target.value)} className={`w-full px-2 py-1 rounded bg-white border border-slate-200 text-right font-mono text-lg font-bold outline-none focus:ring-2 focus:ring-amber-200 ${item.currentLines > 0 ? 'text-amber-900 border-amber-300' : 'text-slate-400'}`} />
+                                                </div>
+                                                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 shadow-inner">
+                                                    <div className="flex gap-2 text-slate-500 mb-1"><Clock size={14} /><label className="text-xs font-bold uppercase tracking-wider">Upcoming</label></div>
+                                                    <input type="number" inputMode="decimal" placeholder="0" value={upcomingQuantities[item.id] ?? ''} onChange={(e) => handleUpcomingChange(item.id, e.target.value)} className={`w-full px-2 py-1 rounded bg-white border border-slate-200 text-right font-mono text-lg font-bold outline-none focus:ring-2 focus:ring-blue-200 ${item.upcomingLines > 0 ? 'text-blue-900 border-blue-300' : 'text-slate-400'}`} />
+                                                </div>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div className={`flex justify-center gap-2 p-3 rounded-lg border ${item.isCritical ? 'bg-red-50 border-red-100 text-red-700' : 'bg-emerald-50 border-emerald-100 text-emerald-700'}`}>
+                                                    {item.isCritical ? <AlertTriangle size={20} /> : <CheckCircle2 size={20} />}
+                                                    <div className="flex flex-col leading-none"><span className="text-[10px] uppercase font-bold opacity-70 mb-0.5">Safety</span><span className="font-bold text-sm">{item.daysLasting.toFixed(1)} Days</span></div>
+                                                </div>
+                                                <div className={`flex justify-center gap-2 p-3 rounded-lg border ${!item.isFulfilled ? 'bg-blue-600 border-blue-700 text-white shadow-md' : 'bg-slate-100 border-slate-200 text-slate-400'}`}>
+                                                    <Truck size={20} />
+                                                    <div className="flex flex-col leading-none"><span className="text-[10px] uppercase font-bold opacity-70 mb-0.5">Order</span><span className="font-bold text-lg">{item.isFulfilled ? "OK" : `${item.cartonsNeeded} Ctns`}</span></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {/* DESKTOP TABLE */}
+                                <div className="hidden md:block bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                                    <table className="w-full text-left">
+                                        <thead>
+                                            <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 text-xs uppercase tracking-wider">
+                                                <th className="p-4 font-semibold min-w-[300px]">Item Details</th>
+                                                <th className="p-4 font-semibold w-32 bg-amber-50/50 text-amber-700 border-l border-amber-100"><div className="flex items-center gap-2"><Pencil size={14} /><span>Current</span></div><div className="text-[10px] font-normal normal-case opacity-70 mt-0.5">Input (Cartons)</div></th>
+                                                <th className="p-4 font-semibold w-32 bg-blue-50/50 text-blue-700 border-l border-blue-100"><div className="flex items-center gap-2"><Clock size={14} /><span>Upcoming</span></div><div className="text-[10px] font-normal normal-case opacity-70 mt-0.5">Order (Cartons)</div></th>
+                                                <th className="p-4 font-semibold text-right w-36 bg-green-50/50 text-green-700 border-l border-green-100"><div className="flex items-center justify-end gap-2"><ShoppingCart size={14} /><span>Order</span></div><div className="text-[10px] font-normal normal-case opacity-70 mt-0.5">Target: {currentConfig.cycle}d</div></th>
+                                                <th className="p-4 font-semibold w-48 text-center bg-gray-50 border-l border-gray-100"><div className="flex items-center justify-center gap-2"><Truck size={14} /><span>Delivery Check</span></div><div className="text-[10px] font-normal normal-case opacity-70 mt-0.5">Safe for {currentConfig.safety} Days?</div></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {calculatedData.map(item => (
+                                                <tr key={item.id} className={`hover:bg-slate-50 group ${item.isCritical ? 'bg-red-50/30' : ''}`}>
+                                                    <td className="p-4"><div className="font-bold text-slate-800 text-base">{item.name}</div>{renderItemStats(item)}</td>
+                                                    <td className="p-4 bg-amber-50/20 border-l border-amber-50 relative group-focus-within:bg-amber-50/40"><input type="number" min="0" step="0.1" placeholder="0" value={lineQuantities[item.id] ?? ''} onChange={(e) => handleQuantityChange(item.id, e.target.value)} className={`w-full px-3 py-1.5 rounded-lg border-2 text-right font-mono text-sm outline-none focus:ring-2 focus:ring-amber-200 ${item.currentLines > 0 ? 'border-amber-300 bg-white text-amber-900 font-bold' : 'border-slate-200 bg-white text-slate-400'}`} /></td>
+                                                    <td className="p-4 bg-blue-50/20 border-l border-blue-50 relative group-focus-within:bg-blue-50/40"><input type="number" min="0" step="0.1" placeholder="0" value={upcomingQuantities[item.id] ?? ''} onChange={(e) => handleUpcomingChange(item.id, e.target.value)} className={`w-full px-3 py-1.5 rounded-lg border-2 text-right font-mono text-sm outline-none focus:ring-2 focus:ring-blue-200 ${item.upcomingLines > 0 ? 'border-blue-300 bg-white text-blue-900 font-bold' : 'border-slate-200 bg-white text-slate-400'}`} /></td>
+                                                    <td className={`p-4 text-right border-l border-green-50 bg-green-50/20 font-mono font-bold text-xl ${item.isFulfilled ? 'text-slate-300' : 'text-green-600'}`}>{item.isFulfilled ? <span className="text-xs font-sans font-medium text-green-600/50">OK</span> : item.cartonsNeeded}</td>
+                                                    <td className="p-4 border-l border-gray-100 text-center">{item.currentLines > 0 ? (item.isCritical ? <div className="inline-flex items-center gap-2 text-red-600 font-bold text-sm bg-red-100 py-1.5 px-3 rounded-full shadow-sm border border-red-200"><AlertTriangle size={14} /><span>{item.daysLasting.toFixed(1)} Days</span></div> : <div className="inline-flex items-center gap-2 text-emerald-600 font-medium text-sm bg-emerald-100 py-1.5 px-3 rounded-full border border-emerald-200"><CheckCircle2 size={14} /><span>Safe ({item.daysLasting.toFixed(1)}d)</span></div>) : <span className="text-slate-300 text-xs">-</span>}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                {/* FOOTER */}
+                                <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-4 pb-8 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-50 flex justify-between gap-4 no-print">
+                                    <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${summary.criticalItems > 0 ? 'bg-red-50 text-red-700 border-red-100' : 'bg-slate-50 text-slate-500 border-slate-100'}`}><AlertOctagon size={20} /><div className="flex flex-col leading-none"><span className="text-[10px] font-bold uppercase opacity-70">Critical</span><span className="text-lg font-bold">{summary.criticalItems}</span></div></div>
+                                    <div className="flex-1 bg-blue-600 text-white rounded-xl px-4 py-2 flex justify-between items-center shadow-lg shadow-blue-600/20"><div className="flex items-center gap-2"><ShoppingCart size={20} className="text-blue-200" /><span className="text-xs font-bold uppercase text-blue-100">Total<br/>Order</span></div><span className="text-2xl font-bold">{summary.totalCartons} <span className="text-sm font-medium opacity-80">ctns</span></span></div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
