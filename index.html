@@ -40,7 +40,7 @@
         #pdf-content {
             background-color: white;
             padding: 10px;
-            width: 1300px; /* Adjusted width to fit landscape page better */
+            width: 1300px; 
             margin: 0 auto; 
         }
         /* Strict borders for the PDF table */
@@ -49,14 +49,14 @@
             width: 100%; 
             border: 2px solid black; 
             font-family: Arial, sans-serif; 
-            font-size: 14px; /* Requested Font Size */
+            font-size: 14px; 
             table-layout: fixed; 
         }
         
         /* Table Cells */
         .pdf-table th, .pdf-table td { 
             border: 1px solid black; 
-            padding: 10px; /* Reduced padding */
+            padding: 2px; 
             text-align: center; 
             vertical-align: middle; 
             height: 30px; 
@@ -256,11 +256,22 @@
             const handleResetDataConfirm = () => { setItems(DEFAULT_DATA); localStorage.removeItem('inventoryData'); setShowResetConfirm(false); };
             const handleResetInputs = () => { if (confirm('Clear all inputs?')) { setLineQuantities({}); setUpcomingQuantities({}); }};
 
+            // FIXED INPUT HANDLING: Store as string
+            const handleQuantityChange = (id, value) => {
+                setLineQuantities(prev => ({ ...prev, [id]: value }));
+            };
+
+            const handleUpcomingChange = (id, value) => {
+                setUpcomingQuantities(prev => ({ ...prev, [id]: value }));
+            };
+
             const calculatedData = useMemo(() => {
                 const config = DAY_CONFIG[selectedDay];
                 return items.map(item => {
-                    const currentLines = lineQuantities[item.id] || 0;
-                    const upcomingLines = upcomingQuantities[item.id] || 0;
+                    // Parse here for math logic
+                    const currentLines = parseFloat(lineQuantities[item.id] || 0);
+                    const upcomingLines = parseFloat(upcomingQuantities[item.id] || 0);
+                    
                     const currentPieces = currentLines * item.perCarton;
                     const upcomingPieces = upcomingLines * item.perCarton;
                     const dailyUsage = item.need / 10;
@@ -534,5 +545,6 @@
         root.render(<App />);
     </script>
 </body>
-
 </html>
+
+
