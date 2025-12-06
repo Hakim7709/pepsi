@@ -303,13 +303,36 @@
             const handlePressOrder = () => {
                 // 1. Download Image
                 handleDownloadImage();
-                // 2. Save current order as "Last Order" in localStorage
-                const currentOrderState = {
-                    lines: lineQuantities,
-                    upcoming: upcomingQuantities,
-                    date: new Date().toISOString()
-                };
-                localStorage.setItem('lastPressedOrder', JSON.stringify(currentOrderState));
+                
+                // 2. Calculate exact orders to save
+                const ordersToSave = {};
+                
+                // We need to calculate the orders based on the current state
+                const config = DAY_CONFIG[selectedDay];
+                
+                items.forEach(item => {
+                    const currentLines = parseFloat(lineQuantities[item.id] || 0);
+                    const upcomingLines = parseFloat(upcomingQuantities[item.id] || 0);
+                    
+                    const currentPieces = currentLines * item.perCarton;
+                    const upcomingPieces = upcomingLines * item.perCarton;
+                    const dailyUsage = item.need / 10;
+                    
+                    const targetPieces = dailyUsage * config.cycle;
+                    const totalProjectedStock = currentPieces + upcomingPieces;
+                    const deficit = targetPieces - totalProjectedStock;
+                    const cartonsNeeded = deficit > 0 ? Math.ceil(deficit / item.perCarton) : 0;
+                    
+                    if (cartonsNeeded > 0) {
+                        ordersToSave[item.id] = cartonsNeeded.toString();
+                    }
+                });
+
+                // Save calculated orders to 'lastPressedOrder'
+                localStorage.setItem('lastPressedOrder', JSON.stringify(ordersToSave));
+                
+                // Optional: notify user
+                // alert("Order saved!"); 
             };
 
             // Fill Upcoming from Previous
@@ -317,41 +340,14 @@
                 const saved = localStorage.getItem('lastPressedOrder');
                 if (saved) {
                     try {
-                        const lastOrder = JSON.parse(saved);
-                        // Logic: We calculate the TOTAL ordered (Order column) from the last session
-                        // and place it into the "Upcoming" slot of the current session.
-                        // Wait, user said "fill previous order on upcomming input".
-                        // Usually this means the *Calculated Order* from last time becomes *Upcoming* this time.
-                        
-                        const newUpcoming = {};
-                        items.forEach(item => {
-                            // Re-calculate what the order WAS based on saved inputs
-                            const lastConfig = DAY_CONFIG[selectedDay]; // Assuming same day logic or just raw numbers
-                            
-                            const lCurrent = parseFloat(lastOrder.lines[item.id] || 0);
-                            const lUpcoming = parseFloat(lastOrder.upcoming[item.id] || 0);
-                            
-                            const cPcs = lCurrent * item.perCarton;
-                            const uPcs = lUpcoming * item.perCarton;
-                            const daily = item.need / 10;
-                            const target = daily * lastConfig.cycle;
-                            const total = cPcs + uPcs;
-                            const deficit = target - total;
-                            const orderQty = deficit > 0 ? Math.ceil(deficit / item.perCarton) : 0;
-                            
-                            if (orderQty > 0) {
-                                newUpcoming[item.id] = orderQty.toString();
-                            }
-                        });
-                        
-                        setUpcomingQuantities(newUpcoming);
-                        alert("Upcoming columns filled with orders calculated from your last 'Press Order'!");
-                        
+                        const lastOrders = JSON.parse(saved);
+                        setUpcomingQuantities(lastOrders);
+                        alert("Upcoming columns filled with quantities from your last 'Press Order'!");
                     } catch (e) {
                         alert("Error loading previous order.");
                     }
                 } else {
-                    alert("No saved order found. Please 'Press Order' first.");
+                    alert("No saved order found. Please use 'Press Order' first to save an order.");
                 }
             };
 
@@ -427,7 +423,7 @@
                     link.download = `Inventory_Order_${new Date().toISOString().split('T')[0]}.png`;
                     link.href = canvas.toDataURL("image/png");
                     link.click();
-                    // alert("Image Report Downloaded Successfully!"); // Removed alert to make it smoother
+                    alert("Image Report Downloaded Successfully!");
                 });
             };
 
@@ -542,7 +538,10 @@
                                                     Inventory Planner
                                                 </h1>
                                                 {/* NEW: Press Order Button (Mobile) */}
-                                                <button onClick={handlePressOrder} className="md:hidden p-2 text-green-600 hover:bg-green-50 rounded-full" title="Press Order"><Send size={24} /></button>
+                                                <div className="flex gap-2 md:hidden">
+                                                    <button onClick={handleFillUpcoming} className="p-2 text-slate-600 hover:bg-slate-100 rounded-full" title="Fill Upcoming"><RefreshCw size={20} /></button>
+                                                    <button onClick={handlePressOrder} className="p-2 text-green-600 hover:bg-green-50 rounded-full" title="Press Order"><Send size={24} /></button>
+                                                </div>
                                             </div>
                                             <div className="flex gap-3 mt-4 md:mt-2 text-sm text-slate-500">
                                                 <div className="flex items-center gap-1.5 bg-blue-50 px-3 py-1.5 rounded-lg text-blue-700 border border-blue-100"><CalendarClock size={14} className="opacity-70" /><span className="font-bold">{currentConfig.cycle} Days Cycle</span></div>
