@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+=<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -31,7 +31,7 @@
             .print-only { display: block !important; }
             /* Force background colors in print */
             body { -webkit-print-color-adjust: exact; }
-            @page { size: landscape; margin: 0.5cm; }
+            @page { size: A4 portrait; margin: 0.5cm; }
         }
         /* Ensure print-only section is hidden on screen by default */
         .print-only { display: none; }
@@ -39,29 +39,39 @@
         /* Styles specifically for the PDF/Image generation container */
         #pdf-content {
             background-color: white;
-            padding: 10px;
-            width: 1300px; 
+            padding: 30px;
+            /* Optimized Width for A4 Portrait (~210mm minus margins) */
+            width: 750px; 
             margin: 0 auto; 
         }
         /* Strict borders for the PDF table */
         .pdf-table { 
             border-collapse: collapse; 
-            width: 100%; 
+            width: 95%; 
             border: 2px solid black; 
             font-family: Arial, sans-serif; 
-            font-size: 14px; 
+            font-size: 12px; /* Reduced for Portrait fit */
             table-layout: fixed; 
         }
         
-        /* Table Cells */
+        /* Table Cells - General */
         .pdf-table th, .pdf-table td { 
             border: 1px solid black; 
-            padding: 2px; 
+            padding: 4px;
             text-align: center; 
-            vertical-align: middle; 
+            vertical-align: middle; /* Default center vertical alignment */
             height: 30px; 
             overflow: hidden;
             white-space: nowrap;
+        }
+
+        /* Specific alignment for the First Column (Item Name) - Top Center */
+        .pdf-table td:first-child {
+            text-align: top;
+            vertical-align: top; /* Align text to the top */
+            white-space: normal; /* Allow wrapping if needed */
+            line-height: 1.4;
+            padding-top: 4px; /* Add some padding from the top border */
         }
         
         /* Exact Excel Colors */
@@ -337,12 +347,13 @@
             const handleDownloadPDF = () => {
                 const element = document.getElementById('pdf-content');
                 element.style.display = 'block';
+                // Using portrait orientation via jsPDF since width is reduced to 750px
                 const opt = { 
                     margin: [0.3, 0.3], 
                     filename: `Inventory_Order_${new Date().toISOString().split('T')[0]}.pdf`, 
                     image: { type: 'jpeg', quality: 0.98 }, 
                     html2canvas: { scale: 1.5 }, 
-                    jsPDF: { unit: 'in', format: 'letter', orientation: 'landscape' } 
+                    jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' } 
                 };
                 html2pdf().set(opt).from(element).save().then(() => { element.style.display = 'none'; });
             };
@@ -388,15 +399,15 @@
                             <div id="pdf-content" style={{ display: 'none' }}>
                                 <table className="pdf-table">
                                     <colgroup>
-                                        <col style={{width: "15%"}} /> {/* Hudaithi Name */}
-                                        <col style={{width: "11%"}} /> {/* Sat */}
-                                        <col style={{width: "11%"}} /> {/* Sun */}
-                                        <col style={{width: "11%"}} /> {/* Mon */}
-                                        <col style={{width: "11%"}} /> {/* Tue */}
-                                        <col style={{width: "11%"}} /> {/* Wed */}
-                                        <col style={{width: "11%"}} /> {/* Thu */}
-                                        <col style={{width: "11%"}} /> {/* Fri */}
-                                        <col style={{width: "8%"}} /> {/* Total */}
+                                        <col style={{width: "15%"}} /> {/* Hudaithi Name - Reduced to 15% */}
+                                        <col style={{width: "10%"}} /> {/* Sat */}
+                                        <col style={{width: "10%"}} /> {/* Sun */}
+                                        <col style={{width: "10%"}} /> {/* Mon */}
+                                        <col style={{width: "10%"}} /> {/* Tue */}
+                                        <col style={{width: "10%"}} /> {/* Wed */}
+                                        <col style={{width: "10%"}} /> {/* Thu */}
+                                        <col style={{width: "10%"}} /> {/* Fri */}
+                                        <col style={{width: "15%"}} /> {/* Total */}
                                     </colgroup>
                                     <thead>
                                         <tr><th colSpan="9" className="bg-excel-red" style={{ fontSize: '18px', padding: '10px', textTransform: 'uppercase' }}>Hudaithi Weekly Order of Pepsi products</th></tr>
@@ -546,5 +557,3 @@
     </script>
 </body>
 </html>
-
-
