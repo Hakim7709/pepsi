@@ -1,4 +1,4 @@
-=<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -121,8 +121,12 @@
         const Clock = (p) => <IconBase {...p}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></IconBase>;
         const FileDown = (p) => <IconBase {...p}><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M12 12v9"/><path d="m8 17 4 4 4-4"/></IconBase>;
         const ImageDown = (p) => <IconBase {...p}><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></IconBase>;
+        const ArrowRightCircle = (p) => <IconBase {...p}><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="m12 16 4-4-4-4"/></IconBase>;
+        const RefreshCw = (p) => <IconBase {...p}><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></IconBase>;
+        const Send = (p) => <IconBase {...p}><line x1="22" x2="11" y1="2" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></IconBase>;
 
         // --- DEFAULT DATA ---
+        // Reverted to Original Data
         const DEFAULT_DATA = [
             { id: 1, name: "Pepsi", need: 3960, perCarton: 24 },
             { id: 2, name: "Diet Pepsi", need: 840, perCarton: 24 },
@@ -255,18 +259,102 @@
                     return saved ? JSON.parse(saved) : DEFAULT_DATA;
                 } catch(e) { return DEFAULT_DATA; }
             });
+            
+            // Load Saved Order State from LocalStorage
+            const [lineQuantities, setLineQuantities] = useState(() => {
+                try {
+                    const saved = localStorage.getItem('savedOrderQuantities');
+                    return saved ? JSON.parse(saved) : {};
+                } catch(e) { return {}; }
+            });
+            const [upcomingQuantities, setUpcomingQuantities] = useState(() => {
+                try {
+                    const saved = localStorage.getItem('savedUpcomingQuantities');
+                    return saved ? JSON.parse(saved) : {};
+                } catch(e) { return {}; }
+            });
+
             const [isAdminMode, setIsAdminMode] = useState(false);
             const [showLoginModal, setShowLoginModal] = useState(false);
             const [showResetConfirm, setShowResetConfirm] = useState(false);
-            const [lineQuantities, setLineQuantities] = useState({});
-            const [upcomingQuantities, setUpcomingQuantities] = useState({});
             const [selectedDay, setSelectedDay] = useState('Saturday');
+
+            // Auto-Save on Change
+            useEffect(() => {
+                localStorage.setItem('savedOrderQuantities', JSON.stringify(lineQuantities));
+            }, [lineQuantities]);
+
+            useEffect(() => {
+                localStorage.setItem('savedUpcomingQuantities', JSON.stringify(upcomingQuantities));
+            }, [upcomingQuantities]);
 
             const handleSaveItems = (newItems) => { setItems(newItems); localStorage.setItem('inventoryData', JSON.stringify(newItems)); };
             const handleResetDataConfirm = () => { setItems(DEFAULT_DATA); localStorage.removeItem('inventoryData'); setShowResetConfirm(false); };
-            const handleResetInputs = () => { if (confirm('Clear all inputs?')) { setLineQuantities({}); setUpcomingQuantities({}); }};
+            
+            // Clear / Reset Logic
+            const handleResetInputs = () => { 
+                if (confirm('Clear all current inputs?')) { 
+                    setLineQuantities({}); 
+                    setUpcomingQuantities({}); 
+                }
+            };
 
-            // FIXED INPUT HANDLING: Store as string
+            // Press Order: Download Image & Save to "Previous Order" state (conceptual)
+            const handlePressOrder = () => {
+                // 1. Download Image
+                handleDownloadImage();
+                // 2. Save current order as "Last Order" in localStorage
+                const currentOrderState = {
+                    lines: lineQuantities,
+                    upcoming: upcomingQuantities,
+                    date: new Date().toISOString()
+                };
+                localStorage.setItem('lastPressedOrder', JSON.stringify(currentOrderState));
+            };
+
+            // Fill Upcoming from Previous
+            const handleFillUpcoming = () => {
+                const saved = localStorage.getItem('lastPressedOrder');
+                if (saved) {
+                    try {
+                        const lastOrder = JSON.parse(saved);
+                        // Logic: We calculate the TOTAL ordered (Order column) from the last session
+                        // and place it into the "Upcoming" slot of the current session.
+                        // Wait, user said "fill previous order on upcomming input".
+                        // Usually this means the *Calculated Order* from last time becomes *Upcoming* this time.
+                        
+                        const newUpcoming = {};
+                        items.forEach(item => {
+                            // Re-calculate what the order WAS based on saved inputs
+                            const lastConfig = DAY_CONFIG[selectedDay]; // Assuming same day logic or just raw numbers
+                            
+                            const lCurrent = parseFloat(lastOrder.lines[item.id] || 0);
+                            const lUpcoming = parseFloat(lastOrder.upcoming[item.id] || 0);
+                            
+                            const cPcs = lCurrent * item.perCarton;
+                            const uPcs = lUpcoming * item.perCarton;
+                            const daily = item.need / 10;
+                            const target = daily * lastConfig.cycle;
+                            const total = cPcs + uPcs;
+                            const deficit = target - total;
+                            const orderQty = deficit > 0 ? Math.ceil(deficit / item.perCarton) : 0;
+                            
+                            if (orderQty > 0) {
+                                newUpcoming[item.id] = orderQty.toString();
+                            }
+                        });
+                        
+                        setUpcomingQuantities(newUpcoming);
+                        alert("Upcoming columns filled with orders calculated from your last 'Press Order'!");
+                        
+                    } catch (e) {
+                        alert("Error loading previous order.");
+                    }
+                } else {
+                    alert("No saved order found. Please 'Press Order' first.");
+                }
+            };
+
             const handleQuantityChange = (id, value) => {
                 setLineQuantities(prev => ({ ...prev, [id]: value }));
             };
@@ -278,7 +366,6 @@
             const calculatedData = useMemo(() => {
                 const config = DAY_CONFIG[selectedDay];
                 return items.map(item => {
-                    // Parse here for math logic
                     const currentLines = parseFloat(lineQuantities[item.id] || 0);
                     const upcomingLines = parseFloat(upcomingQuantities[item.id] || 0);
                     
@@ -340,14 +427,13 @@
                     link.download = `Inventory_Order_${new Date().toISOString().split('T')[0]}.png`;
                     link.href = canvas.toDataURL("image/png");
                     link.click();
-                    alert("Image Report Downloaded Successfully!");
+                    // alert("Image Report Downloaded Successfully!"); // Removed alert to make it smoother
                 });
             };
 
             const handleDownloadPDF = () => {
                 const element = document.getElementById('pdf-content');
                 element.style.display = 'block';
-                // Using portrait orientation via jsPDF since width is reduced to 750px
                 const opt = { 
                     margin: [0.3, 0.3], 
                     filename: `Inventory_Order_${new Date().toISOString().split('T')[0]}.pdf`, 
@@ -455,7 +541,8 @@
                                                     <div className="bg-blue-100 p-2 rounded-lg text-blue-600"><Package size={24} /></div>
                                                     Inventory Planner
                                                 </h1>
-                                                <button onClick={handleResetInputs} className="md:hidden p-2 text-slate-400 hover:bg-red-50 rounded-full"><RotateCcw size={20} /></button>
+                                                {/* NEW: Press Order Button (Mobile) */}
+                                                <button onClick={handlePressOrder} className="md:hidden p-2 text-green-600 hover:bg-green-50 rounded-full" title="Press Order"><Send size={24} /></button>
                                             </div>
                                             <div className="flex gap-3 mt-4 md:mt-2 text-sm text-slate-500">
                                                 <div className="flex items-center gap-1.5 bg-blue-50 px-3 py-1.5 rounded-lg text-blue-700 border border-blue-100"><CalendarClock size={14} className="opacity-70" /><span className="font-bold">{currentConfig.cycle} Days Cycle</span></div>
@@ -471,6 +558,9 @@
                                                     </select>
                                                     <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
                                                 </div>
+                                                {/* NEW: Press Order & Fill Upcoming Buttons (Desktop) */}
+                                                <button onClick={handlePressOrder} className="hidden md:flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold text-white bg-green-600 hover:bg-green-700 rounded-xl shadow-md transition"><Send size={18} /> Press Order</button>
+                                                <button onClick={handleFillUpcoming} className="hidden md:flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl shadow-sm transition"><RefreshCw size={16} /> Fill Upcoming</button>
                                                 <button onClick={handleResetInputs} className="hidden md:flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl"><RotateCcw size={16} /> Reset</button>
                                             </div>
                                             <div className="flex gap-2 items-center">
