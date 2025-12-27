@@ -15,11 +15,11 @@
     <!-- Babel for JSX -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
-    <!-- html2pdf.js for direct PDF download -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <!-- jsPDF for robust PDF generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     
-    <!-- html2canvas for Image Generation -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <!-- dom-to-image for Better Image Generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dom-to-image/2.6.0/dom-to-image.min.js"></script>
     
     <style>
         /* General Styles */
@@ -31,7 +31,8 @@
             .print-only { display: block !important; }
             /* Force background colors in print */
             body { -webkit-print-color-adjust: exact; }
-            @page { size: A4 portrait; margin: 0.5cm; }
+            /* Changed to Landscape */
+            @page { size: A4 landscape; margin: 0.5cm; }
         }
         /* Ensure print-only section is hidden on screen by default */
         .print-only { display: none; }
@@ -39,39 +40,55 @@
         /* Styles specifically for the PDF/Image generation container */
         #pdf-content {
             background-color: white;
-            padding: 30px;
-            /* Optimized Width for A4 Portrait (~210mm minus margins) */
-            width: 750px; 
-            margin: 0 auto; 
+            padding: 40px;
+            /* WIDER width: Adjusted to 1300px as requested */
+            width: 1300px; 
+            margin: 0 auto;
+            /* HIDDEN BY DEFAULT */
+            display: none;
         }
+        
+        /* When active, it acts as a full-screen overlay to guarantee rendering */
+        #pdf-content.visible {
+            display: block;
+            position: fixed;
+            top: 0;
+            left: 0;
+            /* Removed right:0 and width:100vw to prevent shrinking on small screens */
+            z-index: 10000; /* On top of everything */
+            overflow: auto; /* Enable scrolling if testing visually */
+            height: 100vh;
+            padding: 40px;
+            box-sizing: border-box;
+            background: white;
+        }
+
         /* Strict borders for the PDF table */
         .pdf-table { 
             border-collapse: collapse; 
-            width: 95%; 
+            width: 100%; 
             border: 2px solid black; 
             font-family: Arial, sans-serif; 
-            font-size: 12px; /* Reduced for Portrait fit */
+            font-size: 18px; 
             table-layout: fixed; 
         }
         
         /* Table Cells - General */
         .pdf-table th, .pdf-table td { 
             border: 1px solid black; 
-            padding: 4px;
+            padding: 6px;
             text-align: center; 
-            vertical-align: middle; /* Default center vertical alignment */
-            height: 30px; 
+            vertical-align: middle;
+            height: 48px; /* Adjusted to 48px as requested */
             overflow: hidden;
             white-space: nowrap;
         }
 
-        /* Specific alignment for the First Column (Item Name) - Top Center */
+        /* Specific alignment for the First Column (Item Name) */
         .pdf-table td:first-child {
-            text-align: top;
-            vertical-align: top; /* Align text to the top */
-            white-space: normal; /* Allow wrapping if needed */
-            line-height: 1.4;
-            padding-top: 4px; /* Add some padding from the top border */
+            padding: 6px;
+            white-space: normal; 
+            line-height: 1.2;
         }
         
         /* Exact Excel Colors */
@@ -85,7 +102,7 @@
         @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
     </style>
 </head>
-<body class="bg-gray-50 text-slate-800">
+<body class="bg-gray-50 text-slate-800 relative">
     <div id="root"></div>
 
     <script type="text/babel">
@@ -414,30 +431,96 @@
             const weekDates = useMemo(() => getWeekDates(), []);
 
             // --- EXPORT HANDLERS ---
+            
+            // Updated to use dom-to-image with scaling for high resolution
             const handleDownloadImage = () => {
                 const element = document.getElementById('pdf-content');
-                element.style.display = 'block';
-                html2canvas(element, { scale: 2 }).then(canvas => {
-                    element.style.display = 'none';
-                    const link = document.createElement('a');
-                    link.download = `Inventory_Order_${new Date().toISOString().split('T')[0]}.png`;
-                    link.href = canvas.toDataURL("image/png");
-                    link.click();
-                    alert("Image Report Downloaded Successfully!");
-                });
+                element.classList.add('visible');
+
+                // Wait for render
+                setTimeout(() => {
+                    // INCREASED QUALITY: Scale from 3.6 -> 4.5 (+25%)
+                    const scale = 4.5; 
+                    const options = {
+                        quality: 1,
+                        bgcolor: 'white',
+                        width: element.offsetWidth * scale,
+                        height: element.offsetHeight * scale,
+                        style: {
+                            transform: `scale(${scale})`,
+                            transformOrigin: 'top left',
+                            width: `${element.offsetWidth}px`,
+                            height: `${element.offsetHeight}px`
+                        }
+                    };
+
+                    domtoimage.toPng(element, options)
+                        .then(function (dataUrl) {
+                            element.classList.remove('visible');
+                            const link = document.createElement('a');
+                            link.download = `Inventory_Order_${new Date().toISOString().split('T')[0]}.png`;
+                            link.href = dataUrl;
+                            link.click();
+                            alert("High-Quality Image Downloaded!");
+                        })
+                        .catch(function (error) {
+                            console.error('Image Error:', error);
+                            element.classList.remove('visible');
+                            alert("Error generating image.");
+                        });
+                }, 500);
             };
 
             const handleDownloadPDF = () => {
                 const element = document.getElementById('pdf-content');
-                element.style.display = 'block';
-                const opt = { 
-                    margin: [0.3, 0.3], 
-                    filename: `Inventory_Order_${new Date().toISOString().split('T')[0]}.pdf`, 
-                    image: { type: 'jpeg', quality: 0.98 }, 
-                    html2canvas: { scale: 1.5 }, 
-                    jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' } 
-                };
-                html2pdf().set(opt).from(element).save().then(() => { element.style.display = 'none'; });
+                element.classList.add('visible');
+
+                setTimeout(() => {
+                    // INCREASED QUALITY: Scale from 2.4 -> 3.0 (+25%)
+                    const scale = 3.0; 
+                    const options = {
+                        // INCREASED QUALITY: Compression from 0.90 -> 1.0 (Max Quality)
+                        quality: 1.0, 
+                        bgcolor: 'white',
+                        width: element.offsetWidth * scale,
+                        height: element.offsetHeight * scale,
+                        style: {
+                            transform: `scale(${scale})`,
+                            transformOrigin: 'top left',
+                            width: `${element.offsetWidth}px`,
+                            height: `${element.offsetHeight}px`
+                        }
+                    };
+
+                    // Switch to toJpeg for file size optimization
+                    domtoimage.toJpeg(element, options)
+                        .then(function (dataUrl) {
+                            const { jsPDF } = window.jspdf;
+                            
+                            // OPTIMIZATION: Enable PDF object compression
+                            const pdf = new jsPDF({
+                                orientation: 'l',
+                                unit: 'mm',
+                                format: 'a4',
+                                compress: true 
+                            });
+                            
+                            const imgProps = pdf.getImageProperties(dataUrl);
+                            const pdfWidth = pdf.internal.pageSize.getWidth();
+                            const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+                            
+                            // OPTIMIZATION: Use 'FAST' compression mode
+                            pdf.addImage(dataUrl, 'JPEG', 0, 0, pdfWidth, pdfHeight, undefined, 'FAST');
+                            pdf.save(`Inventory_Order_${new Date().toISOString().split('T')[0]}.pdf`);
+                            
+                            element.classList.remove('visible');
+                        })
+                        .catch(function (error) {
+                            console.error('PDF Error:', error);
+                            element.classList.remove('visible');
+                            alert("Error generating PDF");
+                        });
+                }, 500);
             };
 
             const handleExportExcel = () => {
@@ -462,11 +545,11 @@
             );
 
             return (
-                <div className="min-h-screen font-sans pb-24 md:pb-8">
+                <div className="min-h-screen font-sans pb-24 md:pb-8 relative">
                     {showLoginModal && <LoginModal onClose={() => setShowLoginModal(false)} onLogin={() => { setShowLoginModal(false); setIsAdminMode(true); }} />}
                     {showResetConfirm && <ConfirmModal title="Reset Data?" message="This will revert to default items." isDestructive={true} onConfirm={handleResetDataConfirm} onCancel={() => setShowResetConfirm(false)} />}
 
-                    <div className="bg-slate-900 text-white p-2 flex justify-end px-4 gap-3 text-xs font-bold no-print">
+                    <div className="bg-slate-900 text-white p-2 flex justify-end px-4 gap-3 text-xs font-bold no-print relative z-10">
                         <button onClick={() => setIsAdminMode(false)} className={`px-3 py-1 rounded-full ${!isAdminMode ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}>Planner View</button>
                         <button onClick={() => (!isAdminMode && setShowLoginModal(true))} className={`px-3 py-1 rounded-full ${isAdminMode ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}>Admin Mode</button>
                     </div>
@@ -476,9 +559,9 @@
                             <AdminView items={items} onSave={handleSaveItems} onReset={() => setShowResetConfirm(true)} />
                         </div>
                     ) : (
-                        <div>
+                        <div className="relative z-0">
                             {/* PDF/IMAGE GENERATION CONTAINER */}
-                            <div id="pdf-content" style={{ display: 'none' }}>
+                            <div id="pdf-content">
                                 <table className="pdf-table">
                                     <colgroup>
                                         <col style={{width: "15%"}} /> {/* Hudaithi Name - Reduced to 15% */}
@@ -492,7 +575,7 @@
                                         <col style={{width: "15%"}} /> {/* Total */}
                                     </colgroup>
                                     <thead>
-                                        <tr><th colSpan="9" className="bg-excel-red" style={{ fontSize: '18px', padding: '10px', textTransform: 'uppercase' }}>Hudaithi Weekly Order of Pepsi products</th></tr>
+                                        <tr><th colSpan="9" className="bg-excel-red" style={{ fontSize: '26px', padding: '10px', textTransform: 'uppercase', height: 'auto' }}>Hudaithi Weekly Order of Pepsi products</th></tr>
                                         <tr>
                                             <th className="bg-excel-blue" style={{ width: '150px' }}>Hudaithi</th>
                                             {weekDates.map((d, idx) => <th key={idx} className="bg-excel-green" style={{ fontWeight: 'normal' }}>{d.dateStr}</th>)}
@@ -507,7 +590,9 @@
                                     <tbody>
                                         {calculatedData.map((item, idx) => (
                                             <tr key={item.id}>
-                                                <td className="bg-excel-lightgray" style={{ textAlign: 'left', fontWeight: 'bold' }}>{item.name}</td>
+                                                <td className="bg-excel-lightgray">
+                                                    {item.name}
+                                                </td>
                                                 <td></td><td></td>
                                                 <td className="bg-excel-yellow" style={{ fontWeight: 'bold' }}>{item.cartonsNeeded > 0 ? item.cartonsNeeded : ''}</td>
                                                 <td></td><td></td><td></td><td></td>
